@@ -4,37 +4,61 @@ function VisitorCounter({ onCountChange }) {
   const [count, setCount] = useState(0)
 
   useEffect(() => {
-    // Get count from localStorage or initialize
-    const storedCount = localStorage.getItem('visitorCount')
-    const initialCount = storedCount ? parseInt(storedCount, 10) : 0
-    
-    // Check if this is a new visitor (not in current session)
     const sessionKey = 'visitorSession'
     const hasVisited = sessionStorage.getItem(sessionKey)
-    
-    if (!hasVisited) {
-      // New visitor - increment count
-      const newCount = initialCount + 1
+
+    const updateCount = (newCount) => {
       setCount(newCount)
-      localStorage.setItem('visitorCount', newCount.toString())
-      sessionStorage.setItem(sessionKey, 'true')
       if (onCountChange) onCountChange(newCount)
-    } else {
-      // Returning visitor in same session
-      setCount(initialCount)
-      if (onCountChange) onCountChange(initialCount)
     }
 
-    // Listen for admin updates
-    const handleUpdate = () => {
-      const updatedCount = parseInt(localStorage.getItem('visitorCount') || '0', 10)
-      setCount(updatedCount)
-      if (onCountChange) onCountChange(updatedCount)
+    const runLocalFallback = () => {
+      const storedCount = localStorage.getItem('visitorCount')
+      const initialCount = storedCount ? parseInt(storedCount, 10) : 0
+
+      if (!hasVisited) {
+        const newCount = initialCount + 1
+        updateCount(newCount)
+        localStorage.setItem('visitorCount', newCount.toString())
+        sessionStorage.setItem(sessionKey, 'true')
+      } else {
+        updateCount(initialCount)
+      }
+
+      const handleUpdate = () => {
+        const updatedCount = parseInt(localStorage.getItem('visitorCount') || '0', 10)
+        updateCount(updatedCount)
+      }
+      window.addEventListener('visitorCountUpdated', handleUpdate)
+      return () => window.removeEventListener('visitorCountUpdated', handleUpdate)
     }
-    window.addEventListener('visitorCountUpdated', handleUpdate)
-    
+
+    let cleanup = null
+
+    const run = async () => {
+      try {
+        const endpoint = '/.netlify/functions/visitor-count'
+
+        if (!hasVisited) {
+          const res = await fetch(endpoint, { method: 'POST' })
+          if (!res.ok) throw new Error('Failed to increment')
+          const data = await res.json()
+          updateCount(data.count)
+          sessionStorage.setItem(sessionKey, 'true')
+        } else {
+          const res = await fetch(endpoint)
+          if (!res.ok) throw new Error('Failed to fetch')
+          const data = await res.json()
+          updateCount(data.count)
+        }
+      } catch (e) {
+        cleanup = runLocalFallback()
+      }
+    }
+
+    run()
     return () => {
-      window.removeEventListener('visitorCountUpdated', handleUpdate)
+      if (typeof cleanup === 'function') cleanup()
     }
   }, [onCountChange])
 
