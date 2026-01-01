@@ -32,6 +32,10 @@ exports.handler = async (event) => {
         body: JSON.stringify({
           error: 'Missing Netlify Blobs configuration',
           required: ['NETLIFY_AUTH_TOKEN', 'SITE_ID (or NETLIFY_SITE_ID)'],
+          debug: {
+            hasSiteID: Boolean(siteID),
+            hasToken: Boolean(token),
+          },
         }),
       }
     }
