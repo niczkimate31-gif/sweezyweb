@@ -16,7 +16,28 @@ exports.handler = async (event) => {
     }
   }
 
-  const store = getStore('visitor_counter')
+  const siteID = process.env.SITE_ID || process.env.NETLIFY_SITE_ID
+  const token = process.env.NETLIFY_AUTH_TOKEN
+
+  let store
+  try {
+    // Prefer auto-config when available
+    store = getStore('visitor_counter')
+  } catch (e) {
+    // Fallback: manual config (requires env vars)
+    if (!siteID || !token) {
+      return {
+        statusCode: 500,
+        headers,
+        body: JSON.stringify({
+          error: 'Missing Netlify Blobs configuration',
+          required: ['NETLIFY_AUTH_TOKEN', 'SITE_ID (or NETLIFY_SITE_ID)'],
+        }),
+      }
+    }
+
+    store = getStore({ name: 'visitor_counter', siteID, token })
+  }
   const key = 'count'
   const initialCount = 173
 
